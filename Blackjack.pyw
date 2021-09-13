@@ -16,8 +16,8 @@ class Blackjack:
     def __init__(self):
         self.suits = ['Clubs', 'Hearts', 'Diamonds', 'Spades']
         self.names = ['Jack', 'Queen', 'King']
-        self.chips = {'green': 5, 'blue': 10, 'red': 50, 'black': 100}
-        self.balance = 1000
+        self.chips = {'red': 5, 'blue': 10, 'green': 25, 'black': 100}
+        self.balance = 10000
         self.playing = False
         # init pygame
         pygame.mixer.pre_init(44100, -16, 1, 512) # reduces audio latency
@@ -30,15 +30,13 @@ class Blackjack:
     def main_menu(self):
         # create representation of user's balance with a random
         # amount of each denomination
-        '''
         temp_bal = self.balance
         player_chips = []
-        while temp_bal > 0:
-            chip = self.chips[random.randint(1, 4)-1]
-            if not self.chips[chip] > temp_bal:
-                player_chips.append()
+        while temp_bal > 4:
+            chip = random.choice(list(self.chips.keys()))
+            if self.chips[chip] <= temp_bal:
+                player_chips.append(chip)
                 temp_bal -= self.chips[chip]
-        '''
         self.buttons = [Button(1500/2-100, 750, 200, 75, 'Play')]
         while not self.playing:
             pressed_keys = pygame.key.get_pressed()
@@ -61,7 +59,43 @@ class Blackjack:
                     button.update(event)
  
             self.screen.fill((0,100,0))
-            self.screen.blit(get_image('Assets/Cards/cardBack_red2.png'), (100, 600))
+            for x in range(26):
+                self.screen.blit(get_image('Assets/Cards/cardBack_red2.png'), (150-(x*1.3), 50-x))
+            self.screen.blit(get_image('Assets/blackjack_pic.png'), (626, 475))
+            x = 200
+            y = 600
+            angle = 0
+            for chip_color in list(self.chips.keys()):
+                x += 100
+                if x >= 500:
+                    y += 100
+                    x -= 180
+                counter = 0
+                for chip in player_chips:
+                    if chip == chip_color:
+                        counter += 0.3
+                        x -= 0.2
+                        y -= 0.3
+                        pos = (x, y)
+                        angle += 90
+                        image = get_image(f'Assets/Chips/chip{chip}White.png')
+                        w, h = image.get_size()
+                        box = [pygame.math.Vector2(p) for p in [(0, 0), (w, 0), (w, -h), (0, -h)]]
+                        box_rotate = [p.rotate(angle) for p in box]
+                        min_box = (min(box_rotate, key=lambda p: p[0])[0], min(box_rotate, key=lambda p: p[1])[1])
+                        max_box = (max(box_rotate, key=lambda p: p[0])[0], max(box_rotate, key=lambda p: p[1])[1])
+                        pivot = pygame.math.Vector2(w/2, (-1*h)/2)
+                        pivot_rotate = pivot.rotate(angle)
+                        pivot_move = pivot_rotate - pivot
+                        origin = (pos[0] + min_box[0] - pivot_move[0], pos[1] - max_box[1] + pivot_move[1])
+                        rotated_image = pygame.transform.rotate(image, angle)
+                        self.screen.blit(rotated_image, origin)
+
+                        self.screen.blit(image, (x, y))
+                y += counter
+                x += counter
+            drawText('Black', 150, 1500//2-200, 350, center=True, color=(0))
+            drawText('jack', 150, 1500//2+160, 350, center=True, color=(225,5,25))
             for button in self.buttons:
                 button.draw()
             pygame.display.flip()
@@ -69,7 +103,7 @@ class Blackjack:
 
     def play(self):
         while self.playing:
-            self.box = InputBox(330, 860, 75, 30)
+            self.box = InputBox(330, 860, 100, 30)
             self.buttons = [Button(410, 800, 150, 30, 'Hit'), Button(580, 800, 150, 30, 'Stand'),
                             Button(750, 800, 150, 30, 'Double Down'), Button(920, 800, 150, 30, 'Surrender')]
             self.stand = False
@@ -108,14 +142,17 @@ class Blackjack:
                     self.box.handle_event(event)
 
                 if self.stand and self.framecount % 180 == 0:
-                    if self.dealerHand_sum < 17:
+                    dealer_blackjack = self.dealerHand_sum == 11 and self.dealer_ace
+                    if self.dealerHand_sum < 17 and not dealer_blackjack:
                         card = self.deck.pop()
                         self.dealerHand.append(card)
                         if card[0] == 1:
                             self.dealer_ace += 1
                         self.dealerHand_sum += self.dealerHand[-1][0]
-                    elif self.dealerHand_sum >= 17 or (self.dealerHand_sum == 11 and self.dealer_ace):
-                        if self.dealerHand_sum > 21 or self.userHand_sum > self.dealerHand_sum:
+                    elif self.dealerHand_sum >= 17 or dealer_blackjack:
+                        if self.user_ace == 1 and self.userHand_sum < 11:
+                            self.userHand_sum += 10
+                        if self.dealerHand_sum > 21 or self.userHand_sum > self.dealerHand_sum and not dealer_blackjack:
                             self.balance += self.bet
                             self.gameover(f'You won ${self.bet}!')
                         elif self.userHand_sum == self.dealerHand_sum:
@@ -143,7 +180,7 @@ class Blackjack:
                     else:
                         self.screen.blit(get_image(f'Assets/Cards/{filename}.png'), ((i*150)+(1920//2-150-215), 50))
                 for x in range(len(self.deck)//2):
-                    self.screen.blit(get_image('Assets/Cards/cardBack_red2.png'), (300-(x*2), 50-x))
+                    self.screen.blit(get_image('Assets/Cards/cardBack_red2.png'), (300-(x*1.5), 50-x))
                 if self.animation:
                     frame += 1
                     if self.animation == 'hit':
@@ -151,6 +188,7 @@ class Blackjack:
                     elif self.animation == 'double down':
                         pass
                     if frame == 60:
+                        frame = 0
                         self.animation = ''
                     if not self.animation and self.gameover_text:
                         self.gameover(self.gameover_text)
@@ -213,17 +251,24 @@ class Blackjack:
         for card in self.userHand:
             if card[0] == 1:
                 self.user_ace += 1
+        for card in self.dealerHand:
+            if card[0] == 1:
+                self.dealer_ace += 1
         self.dealerHand_sum = self.dealerHand[0][0] + self.dealerHand[1][0]
         self.userHand_sum = self.userHand[0][0] + self.userHand[1][0]
-        if self.dealerHand_sum == 21:
-            if self.userHand_sum == 21:
+        dealer_blackjack = self.dealerHand_sum == 11 and self.dealer_ace
+        user_blackjack = self.userHand_sum == 11 and self.user_ace
+        if self.dealerHand_sum == 21 or dealer_blackjack:
+            if self.userHand_sum == 21 or user_blackjack:
                 self.gameover_text = 'You push.'
+                self.animation = 'push'
             else:
                 self.balance -= (self.bet)
                 self.gameover_text = f'You lost ${self.bet}.'
         elif self.userHand_sum == 21 or (self.userHand_sum == 11 and self.user_ace):
             self.balance += (self.bet*1.5)
             self.gameover_text = f'You won ${self.bet*1.5}0!'
+            self.animation = 'win'
 
     def hit(self):
         card = self.deck.pop()
@@ -248,9 +293,14 @@ class Blackjack:
         if card[0] == 1:
             self.user_ace += 1
         self.userHand_sum += self.userHand[-1][0]
-        if self.userHand_sum > 21 or (self.userHand_sum == 11 and self.user_ace == 1):
+        # Check bust
+        if self.userHand_sum > 21:
             self.balance -= self.bet
             self.gameover_text = f'You lost ${self.bet}.'
+        # Check blackjack
+        elif self.userHand_sum == 21 or (self.userHand_sum == 11 and self.user_ace):
+            self.balance += (self.bet*1.5)
+            self.gameover_text = f'You won ${self.bet*1.5}0!'
 
 
 class InputBox:
@@ -285,7 +335,8 @@ class InputBox:
                 elif event.key == pygame.K_BACKSPACE:
                     self.text = self.text[:-1]
                 else:
-                    self.text += event.unicode
+                    if len(self.text) < len(str(game.balance)):
+                        self.text += event.unicode
                 # Re-render the text.
                 self.txt_surface = FONT.render(self.text, True, self.color)
 
@@ -324,20 +375,25 @@ class Button(pygame.sprite.Sprite):
                 elif self.text == 'Play':
                     game.playing = True
                 elif self.text == 'Hit':
-                    if not game.stand:
+                    if not game.stand and not game.animation:
                         game.animation = 'hit'
                         game.hit()
                 elif self.text == 'Stand':
-                    game.stand = True
+                    if not game.animation:
+                        game.stand = True
                 elif self.text == 'Double Down':
-                    if game.bet*2 <= game.balance:
-                        game.animation = 'double down'
-                        game.double_down()
+                    if not game.stand and not game.animation:
+                        if game.bet*2 <= game.balance:
+                            game.animation = 'double down'
+                            game.double_down()
                 elif self.text == 'Surrender':
-                    game.balance -= self.bet/2
-                    game.gameover(f'You lost ${game.bet/2}0.')
-                elif self.text == 'Main menu':
+                    if not game.animation and game.bet:
+                        game.balance -= game.bet/2
+                        self.animation = 'ph'
+                        game.gameover(f'You lost ${game.bet/2}0.')
+                elif self.text == 'Main Menu':
                     game.playing = False
+                    game.over = True
                     game.endscreen = False
                 elif self.text == 'New Game':
                     game.endscreen = False
@@ -351,6 +407,7 @@ class Button(pygame.sprite.Sprite):
             pygame.draw.rect(game.screen, (140,0,20), (self.rect.x-3, self.rect.y-3, self.rect.w+6, self.rect.h+6), 5)
         pygame.draw.rect(game.screen, self.color, self.rect)
         drawText(self.text, 20, self.rect.x+(self.rect.w//2), self.rect.y+(self.rect.h//2), self.textColor, True)
+
 
 def check_universal_events(event, pressed_keys):
     quit_attempt = False
